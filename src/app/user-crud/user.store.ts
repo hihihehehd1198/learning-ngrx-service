@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { combineLatest, concatMap, exhaustMap, Observable, pipe, switchMap, tap, Subscription, catchError, from } from 'rxjs';
 import { state } from "@angular/animations";
-import { ComponentStore } from "@ngrx/component-store"
+import { ComponentStore, OnStateInit, tapResponse } from "@ngrx/component-store"
 import { UserServiceService } from "./user-service.service"
 import { InitialState } from '@ngrx/store/src/models';
 
@@ -24,48 +24,60 @@ export interface userState {
 }
 
 @Injectable()
-export class UserStore extends ComponentStore<userState>{
+export class UserStore extends ComponentStore<userState> {
 
     constructor(private userService: UserServiceService) {
         super({ listUser: [], error: '', loading: false })
+        this.getAllUser()
     }
-    listUser$ = this.select(x=>x.listUser)
+
 
     getAllUser() {
-     return    this.userService.getListUser().pipe(tap((x: any) => {
+        return this.effect(
+            pipe(
+                () => this.userService.getListUser().pipe(tapResponse((response: any) => {
 
-            this.updater((state) => ({
-                ...state,
-                listUser: [...x]
-            }))
-            
-        }
-        ))
-
+                    this.patchState({
+                        error: '',
+                        loading: false,
+                        listUser: response
+                    })
+                }, (err) => {
+                    console.log(err)
+                }))
+            )
+        )
     }
-
-
 
     addNewUser(data: any) {
-        this.userService.addUser(data).then(() => {
-            return this.updater((state) => ({
-                ...state,
-                listUser: [...state.listUser, data]
-            }))
-        })
-        return;
-    }
-    deleteUser(id: any) {
-        this.userService.deleteUser(id).then(() => {
-            return this.updater((state) => {
-                state.listUser.splice(state.listUser.findIndex(x => x.uid === id), 1)
-                return ({
-                    ...state,
-                    listUser: [...state.listUser]
-                })
-            })
-        })
-        return;
+        
+
+
+        return this.effect(
+            pipe(() => from(this.userService.addUser(data)).pipe(tapResponse((res) => {
+                // console.log(res)
+                // this.patchState((state: userState) => ({
+                //     ...state,
+                //     listUser: [...state.listUser]
+                // }))
+            }, (err: any) => {
+                console.log(err)
+            })))
+        )
     }
 
+
+    deleteUser(id: any) {
+        this.userService.deleteUser(id).then(() => {
+            // return this.updater((state) => {
+            //     state.listUser.splice(state.listUser.findIndex(x => x.uid === id), 1)
+            //     return ({
+            //         ...state,
+            //         listUser: [...state.listUser]
+            //     })
+            // })
+        })
+        return;
+    }
+    listUser$ = this.select(x => x.listUser, { debounce: true })
 }
